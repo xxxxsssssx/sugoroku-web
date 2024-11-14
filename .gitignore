@@ -1,0 +1,14 @@
+# Python関連
+*.pyc
+__pycache__/
+venv/
+env/
+*.pyo
+*.pyd
+
+# MacOS関連
+.DS_Store
+
+# その他
+*.log
+*.sqlite3

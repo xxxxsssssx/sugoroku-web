@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>確率すごろくゲーム</title>
+    <!-- CSSファイルの読み込み -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>確率すごろくゲーム</h1>
+
+    <div id="loading_indicator" style="display:none;">
+        <p>通信中...</p>
+    </div>    
+
+    <!-- プレイヤー人数の選択 -->
+    <div id="setup">
+        <p>プレイヤー人数を選択してください（2～4人）：</p>
+        <select id="num_players">
+            <option value="2">2人</option>
+            <option value="3">3人</option>
+            <option value="4">4人</option>
+        </select>
+        <button id="start_game_button">ゲーム開始</button>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="game_area" style="display:none;">
+        <!-- メッセージ表示エリア -->
+        <div id="message_area"></div>
+
+        <!-- サイコロの確率表示 -->
+        <h3>サイコロの確率分布：</h3>
+        <div id="dice_probabilities"></div>
+
+        <!-- イベントの説明 -->
+        <h3>イベントの説明：</h3>
+        <div id="event_descriptions"></div>
+
+        <!-- プレイヤー情報 -->
+        <h3>プレイヤー情報：</h3>
+        <div id="player_info"></div>
+
+        <!-- ボタンエリア -->
+        <div id="button_area">
+            <button id="next_turn_button">次のプレイヤーのターン</button>
+            <button id="roll_dice_button">サイコロを振る</button>
+        </div>
+
+        <!-- ゲームボード表示エリア -->
+        <canvas id="game_board" width="700" height="700"></canvas>
+    </div>
+
+    <!-- JavaScriptファイルの読み込み -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
