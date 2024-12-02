@@ -9,19 +9,25 @@
 <body>
     <h1>確率すごろくゲーム</h1>
 
+    <!-- ローディング表示 -->
     <div id="loading_indicator" style="display:none;">
         <p>通信中...</p>
-    </div>    
+    </div>
 
     <!-- プレイヤー人数の選択 -->
     <div id="setup">
-        <p>プレイヤー人数を選択してください（2～4人）：</p>
+        <label for="num_players">プレイヤー人数:</label>
         <select id="num_players">
             <option value="2">2人</option>
             <option value="3">3人</option>
             <option value="4">4人</option>
         </select>
         <button id="start_game_button">ゲーム開始</button>
+
+        <!-- キャラクター選択フォーム -->
+        <div id="character_selection">
+            <!-- JavaScriptで動的に生成 -->
+        </div>
     </div>
 
     <!-- ゲーム画面 -->
@@ -29,13 +35,18 @@
         <!-- メッセージ表示エリア -->
         <div id="message_area"></div>
 
-        <!-- サイコロの確率表示 -->
+        <!-- サイコロの確率分布 -->
         <h3>サイコロの確率分布：</h3>
-        <div id="dice_probabilities"></div>
+        <button id="toggle_dice_probabilities_button">サイコロの確率分布を表示</button>
+        <div id="dice_probabilities" style="display: none;">
+            <canvas id="dice_chart" width="300" height="300"></canvas>
+        </div>
 
-        <!-- イベントの説明 -->
-        <h3>イベントの説明：</h3>
-        <div id="event_descriptions"></div>
+        <!-- イベント説明の表示/非表示ボタン -->
+        <button id="toggle_event_descriptions_button">イベント説明を表示</button>
+        <div id="event_descriptions" style="display: none;">
+            <!-- イベントの説明がここに表示される -->
+        </div>
 
         <!-- プレイヤー情報 -->
         <h3>プレイヤー情報：</h3>
@@ -51,7 +62,59 @@
         <canvas id="game_board" width="700" height="700"></canvas>
     </div>
 
+    <!-- モンティ・ホールイベント用モーダル -->
+    <div id="monty_hall_modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="monty_hall_close_button">&times;</span>
+            <div id="monty_hall_content">
+                <!-- モンティ・ホールの選択肢がここに表示されます -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 迷路イベント用モーダル -->
+    <div id="maze_modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="maze_close_button">&times;</span>
+            <h2>確率の迷路</h2>
+            <div id="maze_content">
+                <!-- 迷路の進行状況がここに表示されます -->
+            </div>
+        </div>
+    </div>
+
+    <!-- サイコロカスタマイズ用モーダル -->
+    <div id="dice_customization_modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="dice_customization_close">&times;</span>
+            <h2>サイコロのカスタマイズ</h2>
+            <p>各目の出る確率を入力してください（合計で1になるように）:</p>
+            <form id="dice_customization_form">
+                <label for="face1">1の目:</label>
+                <input type="number" id="face1" name="face1" min="0" max="1" step="0.01" required><br>
+                <label for="face2">2の目:</label>
+                <input type="number" id="face2" name="face2" min="0" max="1" step="0.01" required><br>
+                <label for="face3">3の目:</label>
+                <input type="number" id="face3" name="face3" min="0" max="1" step="0.01" required><br>
+                <label for="face4">4の目:</label>
+                <input type="number" id="face4" name="face4" min="0" max="1" step="0.01" required><br>
+                <label for="face5">5の目:</label>
+                <input type="number" id="face5" name="face5" min="0" max="1" step="0.01" required><br>
+                <label for="face6">6の目:</label>
+                <input type="number" id="face6" name="face6" min="0" max="1" step="0.01" required><br>
+                <button type="submit">設定</button>
+            </form>
+        </div>
+    </div>
+
     <!-- JavaScriptファイルの読み込み -->
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <!-- Chart.jsの読み込みはscript.jsの前に配置 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='utils.js') }}"></script>
+<script src="{{ url_for('static', filename='ui.js') }}"></script>
+<script src="{{ url_for('static', filename='events.js') }}"></script>
+<script src="{{ url_for('static', filename='api.js') }}"></script>
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+
 </body>
 </html>

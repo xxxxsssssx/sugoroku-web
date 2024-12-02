@@ -9,9 +9,21 @@ from game_logic import (
     forward_event_factory,
     backward_event_factory,
     dice_modifier_event_factory,
+    ProbabilityMazeEvent,
+    DiceCustomizationEvent,
+    MontyHallEvent,
 )
+import random
 
 app = Flask(__name__)
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({'message': 'Not Found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'message': 'Internal Server Error'}), 500
 
 # ゲームのインスタンスを保持する変数
 game = None
@@ -25,9 +37,14 @@ def start_game():
     global game
     data = request.get_json()
     num_players = data.get('num_players', 2)
+    characters = data.get('characters', [])
 
     # プレイヤーの作成
-    players = [Player(f"プレイヤー{i+1}") for i in range(num_players)]
+    players = []
+    for i in range(num_players):
+        name = f"プレイヤー{i+1}"
+        character = characters[i] if i < len(characters) else 'default.png'
+        players.append(Player(name, character))
 
     # サイコロの確率設定
     default_dice_probabilities = {
@@ -52,6 +69,11 @@ def start_game():
     board.add_event(25, backward_event_factory(4))
     board.add_event(30, dice_modifier_event_factory({1: 0.3, 2: 0.3, 3: 0.2, 4: 0.1, 5: 0.05, 6: 0.05}))
 
+    # 新しいイベントの追加
+    board.add_event(12, ProbabilityMazeEvent())
+    board.add_event(18, DiceCustomizationEvent())
+    board.add_event(22, MontyHallEvent())
+
     # ゲームの作成
     game = Game(players, board, dice)
     game.start()
@@ -67,7 +89,10 @@ def get_game_state():
     for player in game.players:
         players_state.append({
             'name': player.name,
-            'position': player.position
+            'position': player.position,
+            'character': player.character,
+            'is_in_monty_hall': player.is_in_monty_hall,
+            'is_in_maze': player.is_in_maze
         })
 
     return jsonify({
@@ -92,7 +117,10 @@ def roll_dice():
     for player in game.players:
         players_state.append({
             'name': player.name,
-            'position': player.position
+            'position': player.position,
+            'character': player.character,
+            'is_in_monty_hall': player.is_in_monty_hall,
+            'is_in_maze': player.is_in_maze
         })
 
     response = {
@@ -103,7 +131,6 @@ def roll_dice():
     }
 
     return jsonify(response)
-
 
 @app.route('/get_dice_probabilities', methods=['GET'])
 def get_dice_probabilities():
@@ -134,8 +161,103 @@ def get_event_descriptions():
         events.append({'name': name, 'description': description})
     return jsonify({'events': events})
 
+# 新しいエンドポイント：サイコロのカスタマイズ
+@app.route('/set_custom_dice', methods=['POST'])
+def set_custom_dice():
+    global game
+    if game is None:
+        return jsonify({'message': 'ゲームが開始されていません。'}), 400
+
+    data = request.get_json()
+    probabilities = data.get('probabilities', {})
+    probabilities = {int(k): float(v) for k, v in probabilities.items()}
+
+    # 合計が1か確認
+    if abs(sum(probabilities.values()) - 1.0) > 0.01:
+        return jsonify({'message': '確率の合計が1になるようにしてください。'}), 400
+
+    player = game.players[game.current_player_index]
+    if player.needs_dice_customization:
+        player.dice = Dice(probabilities)
+        player.needs_dice_customization = False
+        return jsonify({'message': 'サイコロをカスタマイズしました。'})
+    else:
+        return jsonify({'message': 'サイコロのカスタマイズは必要ありません。'}), 400
+
+# 新しいエンドポイント：モンティ・ホールの選択
+@app.route('/monty_hall_choice', methods=['POST'])
+def monty_hall_choice():
+    global game
+    if game is None:
+        return jsonify({'message': 'ゲームが開始されていません。'}), 400
+
+    data = request.get_json()
+    player = game.players[game.current_player_index]
+
+    if not player.is_in_monty_hall:
+        return jsonify({'message': 'モンティ・ホールイベント中ではありません。'}), 400
+
+    if player.monty_hall_state.get('player_choice') is None:
+        # プレイヤーの最初の選択
+        choice = int(data.get('choice', 0))
+        if choice not in [1, 2, 3]:
+            return jsonify({'message': '1から3の数字を選んでください。'}), 400
+        player.monty_hall_state['player_choice'] = choice
+
+        # 開ける扉を決定
+        doors = [1, 2, 3]
+        doors.remove(player.monty_hall_state['prize_door'])
+        if player.monty_hall_state['player_choice'] != player.monty_hall_state['prize_door']:
+            doors.remove(player.monty_hall_state['player_choice'])
+        opened_door = random.choice(doors)
+        player.monty_hall_state['opened_door'] = opened_door
+
+        message = f"扉{opened_door}はハズレでした。選択を変更しますか？（yes/no）"
+        return jsonify({'message': message})
+    else:
+        # プレイヤーの選択変更
+        change = data.get('change', 'no')
+        if change.lower() == 'yes':
+            remaining_door = 6 - player.monty_hall_state['player_choice'] - player.monty_hall_state['opened_door']
+            player.monty_hall_state['player_choice'] = remaining_door
+
+        # 結果判定
+        if player.monty_hall_state['player_choice'] == player.monty_hall_state['prize_door']:
+            message = "おめでとうございます！報酬として2マス進みます。"
+            player.position += 2
+        else:
+            message = "残念！ハズレでした。"
+        player.is_in_monty_hall = False
+        player.monty_hall_state = {}
+        return jsonify({'message': message})
+
+# 新しいエンドポイント：迷路の進行
+@app.route('/maze_progress', methods=['GET'])
+def maze_progress():
+    global game
+    if game is None:
+        return jsonify({'message': 'ゲームが開始されていません。'}), 400
+
+    player = game.players[game.current_player_index]
+
+    if not player.is_in_maze or not player.maze:
+        return jsonify({'message': '迷路イベント中ではありません。'}), 400
+
+    # 迷路を進行
+    result_message = player.maze.navigate()
+
+    # 迷路が終了したか確認
+    if player.maze.is_finished:
+        player.is_in_maze = False
+        if player.maze.is_success:
+            player.position += player.maze.reward_steps
+            result_message += f"\n{player.name}は迷路を突破し、{player.maze.reward_steps}マス進みました！"
+        else:
+            result_message += f"\n{player.name}は迷路で迷ってしまいました。"
+        player.maze = None
+
+    return jsonify({'message': result_message})
 
 if __name__ == '__main__':
-    # デバッグモードを無効化
-    app.run(host='0.0.0.0', port=5000)
-
+    # デバッグモードを有効化（必要に応じて）
+    app.run(host='0.0.0.0', port=5000, debug=True)
