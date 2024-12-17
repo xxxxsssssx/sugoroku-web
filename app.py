@@ -8,28 +8,22 @@ from game_logic import (
     Game,
     forward_event_factory,
     backward_event_factory,
-    dice_modifier_event_factory,
     ProbabilityMazeEvent,
-    DiceCustomizationEvent,
+    DiceSelectionEvent,
     MontyHallEvent,
+    PREDEFINED_DICE_OPTIONS,
+    MYSTERY_DICE_OPTIONS
 )
 import random
 
 app = Flask(__name__)
-
-@app.errorhandler(404)
-def not_found_error(error):
-    return jsonify({'message': 'Not Found'}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({'message': 'Internal Server Error'}), 500
 
 # ゲームのインスタンスを保持する変数
 game = None
 
 @app.route('/')
 def index():
+    # メインページを表示します
     return render_template('index.html')
 
 @app.route('/start_game', methods=['POST'])
@@ -38,44 +32,34 @@ def start_game():
     data = request.get_json()
     num_players = data.get('num_players', 2)
     characters = data.get('characters', [])
+    max_turns = data.get('max_turns', 20)  # ユーザーからターン数を指定できるようにする
 
-    # プレイヤーの作成
     players = []
     for i in range(num_players):
         name = f"プレイヤー{i+1}"
         character = characters[i] if i < len(characters) else 'default.png'
         players.append(Player(name, character))
 
-    # サイコロの確率設定
-    default_dice_probabilities = {
-        1: 0.2,
-        2: 0.15,
-        3: 0.25,
-        4: 0.2,
-        5: 0.1,
-        6: 0.1
-    }
-    dice = Dice(default_dice_probabilities.copy())
+    default_dice = PREDEFINED_DICE_OPTIONS[0]
+    dice = Dice(default_dice['probabilities'].copy())
 
-    # ボードの作成
-    board_size = 40  # マス数を増やす
+    board_size = 40
     board = Board(board_size)
 
     # イベントの追加
+    board.add_event(7, MontyHallEvent())
+    board.add_event(4, MontyHallEvent())
     board.add_event(5, forward_event_factory(2))
     board.add_event(10, backward_event_factory(3))
-    board.add_event(15, dice_modifier_event_factory({1: 0.1, 2: 0.1, 3: 0.2, 4: 0.3, 5: 0.2, 6: 0.1}))
+    board.add_event(15, DiceSelectionEvent())  # サイコロ選択イベント
     board.add_event(20, forward_event_factory(5))
     board.add_event(25, backward_event_factory(4))
-    board.add_event(30, dice_modifier_event_factory({1: 0.3, 2: 0.3, 3: 0.2, 4: 0.1, 5: 0.05, 6: 0.05}))
-
-    # 新しいイベントの追加
+    board.add_event(30, DiceSelectionEvent())  # サイコロ選択イベント
     board.add_event(12, ProbabilityMazeEvent())
-    board.add_event(18, DiceCustomizationEvent())
     board.add_event(22, MontyHallEvent())
 
     # ゲームの作成
-    game = Game(players, board, dice)
+    game = Game(players, board, dice, max_turns=max_turns)
     game.start()
 
     return jsonify({'message': 'ゲームを開始しました。', 'num_players': num_players})
@@ -92,7 +76,8 @@ def get_game_state():
             'position': player.position,
             'character': player.character,
             'is_in_monty_hall': player.is_in_monty_hall,
-            'is_in_maze': player.is_in_maze
+            'is_in_maze': player.is_in_maze,
+            'needs_dice_selection': player.needs_dice_selection  # 更新
         })
 
     return jsonify({
@@ -108,9 +93,6 @@ def roll_dice():
 
     message = game.next_turn()
 
-    # ゲームが終了していない場合、次のプレイヤーにターンを渡す
-    if not game.is_over:
-        game.current_player_index = (game.current_player_index + 1) % len(game.players)
 
     # ゲーム状態を返す
     players_state = []
@@ -120,7 +102,8 @@ def roll_dice():
             'position': player.position,
             'character': player.character,
             'is_in_monty_hall': player.is_in_monty_hall,
-            'is_in_maze': player.is_in_maze
+            'is_in_maze': player.is_in_maze,
+            'needs_dice_selection': player.needs_dice_selection  # 更新
         })
 
     response = {
@@ -161,30 +144,69 @@ def get_event_descriptions():
         events.append({'name': name, 'description': description})
     return jsonify({'events': events})
 
-# 新しいエンドポイント：サイコロのカスタマイズ
-@app.route('/set_custom_dice', methods=['POST'])
-def set_custom_dice():
+
+@app.route('/select_dice', methods=['POST'])
+def select_dice():
     global game
     if game is None:
         return jsonify({'message': 'ゲームが開始されていません。'}), 400
 
     data = request.get_json()
-    probabilities = data.get('probabilities', {})
-    probabilities = {int(k): float(v) for k, v in probabilities.items()}
-
-    # 合計が1か確認
-    if abs(sum(probabilities.values()) - 1.0) > 0.01:
-        return jsonify({'message': '確率の合計が1になるようにしてください。'}), 400
+    selected_dice_index = int(data.get('dice_index', -1))
 
     player = game.players[game.current_player_index]
-    if player.needs_dice_customization:
-        player.dice = Dice(probabilities)
-        player.needs_dice_customization = False
-        return jsonify({'message': 'サイコロをカスタマイズしました。'})
-    else:
-        return jsonify({'message': 'サイコロのカスタマイズは必要ありません。'}), 400
 
-# 新しいエンドポイント：モンティ・ホールの選択
+    if not player.needs_dice_selection:
+        return jsonify({'message': 'サイコロの選択は必要ありません。'}), 400
+
+    # 選択されたインデックスがPREDEFINEDとMYSTERYの合計の範囲内か確認
+    total_options = len(PREDEFINED_DICE_OPTIONS) + len(MYSTERY_DICE_OPTIONS)
+    if selected_dice_index < 0 or selected_dice_index >= total_options:
+        return jsonify({'message': '無効なサイコロの選択です。'}), 400
+
+    if selected_dice_index < len(PREDEFINED_DICE_OPTIONS):
+        # 通常サイコロ選択
+        selected_dice = PREDEFINED_DICE_OPTIONS[selected_dice_index]
+        player.dice = Dice(selected_dice['probabilities'])
+        dice_name = selected_dice['name']
+    else:
+        # 謎サイコロ選択
+        mystery_index = selected_dice_index - len(PREDEFINED_DICE_OPTIONS)
+        selected_dice = MYSTERY_DICE_OPTIONS[mystery_index]
+        player.dice = Dice(selected_dice['probabilities'])
+        dice_name = selected_dice['name']
+    
+    player.needs_dice_selection = False
+    message = f"{player.name}は「{dice_name}」を選択しました。"
+    return jsonify({'message': message})
+
+
+@app.route('/get_dice_options', methods=['GET'])
+def get_dice_options():
+    # 従来のオプションと謎サイコロオプションをまとめたリストを作る
+    # 謎サイコロは確率を非公開にするため、probabilitiesを返さない、または偽のデータにする
+    dice_options = []
+
+    # 通常のサイコロは従来通り確率を公開
+    for dice_option in PREDEFINED_DICE_OPTIONS:
+        dice_options.append({
+            'name': dice_option['name'],
+            'description': dice_option['description'],
+            'probabilities': dice_option['probabilities']  # 従来通り公開
+        })
+
+    # 謎サイコロは確率を非表示。ここではprobabilitiesを返さないか、空にする
+    from game_logic import MYSTERY_DICE_OPTIONS
+    for dice_option in MYSTERY_DICE_OPTIONS:
+        dice_options.append({
+            'name': dice_option['name'],
+            'description': dice_option['description'],
+            # 'probabilities': {} # もしくは返さない
+            # ここでは確率を返さないことで、クライアントは確率不明なサイコロとして受け取る
+        })
+
+    return jsonify({'dice_options': dice_options})
+
 @app.route('/monty_hall_choice', methods=['POST'])
 def monty_hall_choice():
     global game
@@ -212,27 +234,39 @@ def monty_hall_choice():
         opened_door = random.choice(doors)
         player.monty_hall_state['opened_door'] = opened_door
 
-        message = f"扉{opened_door}はハズレでした。選択を変更しますか？（yes/no）"
-        return jsonify({'message': message})
+        message = f"扉{opened_door}はハズレでした。選択を変更しますか？（はい/いいえ）"
+        return jsonify({'message': message, 'opened_door': opened_door})
     else:
         # プレイヤーの選択変更
-        change = data.get('change', 'no')
-        if change.lower() == 'yes':
+        change = data.get('change', 'いいえ')
+        if change.lower() == 'はい':
             remaining_door = 6 - player.monty_hall_state['player_choice'] - player.monty_hall_state['opened_door']
             player.monty_hall_state['player_choice'] = remaining_door
 
         # 結果判定
+        monty_event = None
+        for cell in game.board.cells:
+            if cell.position == player.position and isinstance(cell.event, MontyHallEvent):
+                monty_event = cell.event
+                break
+
+        if monty_event is None:
+            monty_event = MontyHallEvent()  # デフォルト値を設定
+
         if player.monty_hall_state['player_choice'] == player.monty_hall_state['prize_door']:
-            message = "おめでとうございます！報酬として2マス進みます。"
-            player.position += 2
+            message = f"おめでとうございます！賞品を獲得しました。{monty_event.reward_steps}マス進みます。"
+            player.position += monty_event.reward_steps
         else:
-            message = "残念！ハズレでした。"
+            message = f"残念！ハズレでした。{monty_event.penalty_steps}マス戻ります。"
+            player.position -= monty_event.penalty_steps
+            if player.position < 0:
+                player.position = 0
         player.is_in_monty_hall = False
         player.monty_hall_state = {}
         return jsonify({'message': message})
 
-# 新しいエンドポイント：迷路の進行
-@app.route('/maze_progress', methods=['GET'])
+
+@app.route('/maze_progress', methods=['GET', 'POST'])
 def maze_progress():
     global game
     if game is None:
@@ -243,21 +277,48 @@ def maze_progress():
     if not player.is_in_maze or not player.maze:
         return jsonify({'message': '迷路イベント中ではありません。'}), 400
 
-    # 迷路を進行
-    result_message = player.maze.navigate()
+    if request.method == 'GET':
+        # 現在の選択肢を取得して返す
+        choices = player.maze.get_current_choices()
+        choices_info = []
+        for idx, choice in enumerate(choices):
+            choices_info.append({
+                'index': idx,
+                'description': choice['description'],
+                'probability': choice['probability']
+            })
+        message = f"{player.name}は現在「{player.maze.current_node}」にいます。次に進む道を選んでください。"
+        return jsonify({'message': message, 'choices': choices_info})
+    else:
+        # プレイヤーの選択を処理
+        data = request.get_json()
+        choice_index = int(data.get('choice_index', -1))
+        result_message = player.maze.make_choice(choice_index)
 
-    # 迷路が終了したか確認
-    if player.maze.is_finished:
-        player.is_in_maze = False
-        if player.maze.is_success:
-            player.position += player.maze.reward_steps
-            result_message += f"\n{player.name}は迷路を突破し、{player.maze.reward_steps}マス進みました！"
-        else:
-            result_message += f"\n{player.name}は迷路で迷ってしまいました。"
-        player.maze = None
+        # 迷路が終了したか確認
+        if player.maze.is_finished:
+            player.is_in_maze = False
+            if player.maze.is_success:
+                player.position += player.maze.reward_steps
+                result_message += f"\n{player.name}は迷路を突破し、{player.maze.reward_steps}マス進みました！"
+            else:
+                player.position -= player.maze.penalty_steps
+                if player.position < 0:
+                    player.position = 0
+                result_message += f"\n{player.name}は迷路で迷い、{player.maze.penalty_steps}マス戻りました。"
+            player.maze = None
 
-    return jsonify({'message': result_message})
+        return jsonify({'message': result_message})
+
+# エラーハンドラーの追加
+@app.errorhandler(404)
+def not_found_error(error):
+    return jsonify({'message': 'Not Found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'message': 'Internal Server Error'}), 500
 
 if __name__ == '__main__':
-    # デバッグモードを有効化（必要に応じて）
+    # アプリケーションを起動します
     app.run(host='0.0.0.0', port=5000, debug=True)

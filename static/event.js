@@ -1,11 +1,9 @@
 // events.js
 
-// ゲーム内の各種イベントを処理する関数をまとめたモジュール
-
 // モンティ・ホールイベントを処理する関数
 function handleMontyHallEvent(player) {
     if (player.is_in_monty_hall) {
-        // モーダルを表示して選択を促す
+        // モーダルを表示して選択を促します
         montyHallContent.innerHTML = `
             <p>${player.name}はモンティ・ホールの挑戦に挑みます。</p>
             <p>1〜3の扉から1つを選んでください。</p>
@@ -15,7 +13,7 @@ function handleMontyHallEvent(player) {
         `;
         montyHallModal.style.display = 'block';
 
-        // 扉の選択ボタンにイベントリスナーを追加
+        // 扉の選択ボタンにイベントリスナーを追加します
         document.getElementById('monty_choice_1').addEventListener('click', () => montyHallChoice(1));
         document.getElementById('monty_choice_2').addEventListener('click', () => montyHallChoice(2));
         document.getElementById('monty_choice_3').addEventListener('click', () => montyHallChoice(3));
@@ -24,7 +22,7 @@ function handleMontyHallEvent(player) {
 
 // モンティ・ホールで扉を選択したときの処理を行う関数
 function montyHallChoice(choice) {
-    // サーバーに選択した扉を送信
+    // サーバーに選択した扉を送信します
     fetch('/monty_hall_choice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -36,17 +34,17 @@ function montyHallChoice(choice) {
         montyHallContent.innerHTML = '';
 
         if (data.message.includes('選択を変更しますか？')) {
-            // 選択を変更するかどうかを尋ねる画面を表示
+            // 選択を変更するかどうかを尋ねる画面を表示します
             montyHallContent.innerHTML = `
                 <p>扉${data.opened_door}はハズレでした。</p>
                 <p>選択を変更しますか？</p>
                 <button id="monty_change_yes">はい</button>
                 <button id="monty_change_no">いいえ</button>
             `;
-            document.getElementById('monty_change_yes').addEventListener('click', () => montyHallChange('yes'));
-            document.getElementById('monty_change_no').addEventListener('click', () => montyHallChange('no'));
+            document.getElementById('monty_change_yes').addEventListener('click', () => montyHallChange('はい'));
+            document.getElementById('monty_change_no').addEventListener('click', () => montyHallChange('いいえ'));
         } else {
-            // 結果が出たらモーダルを閉じてゲーム状態を更新
+            // 結果が出たらモーダルを閉じてゲーム状態を更新します
             montyHallModal.style.display = 'none';
             getGameState();
         }
@@ -59,7 +57,7 @@ function montyHallChoice(choice) {
 
 // モンティ・ホールで選択を変更するかどうかの処理を行う関数
 function montyHallChange(change) {
-    // サーバーに選択を変更するかどうかを送信
+    // サーバーに選択を変更するかどうかを送信します
     fetch('/monty_hall_choice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -70,8 +68,8 @@ function montyHallChange(change) {
         appendMessage(data.message);
         montyHallContent.innerHTML = '';
         montyHallModal.style.display = 'none';
-        alert(data.message);  // 結果をアラートで表示
-        getGameState();  // ゲーム状態を更新
+        alert(data.message);  // 結果をアラートで表示します
+        getGameState();  // ゲーム状態を更新します
     })
     .catch(error => {
         console.error('Error:', error);
@@ -82,16 +80,30 @@ function montyHallChange(change) {
 // 迷路イベントを処理する関数
 function handleMazeEvent(player) {
     if (player.is_in_maze) {
-        // 迷路の進行状況をサーバーから取得
+        // 迷路の進行状況をサーバーから取得します
         fetch('/maze_progress', {
             method: 'GET'
         })
         .then(response => response.json())
         .then(data => {
-            // 迷路の内容をモーダルに表示
-            mazeContent.innerHTML = data.message.replace(/\n/g, '<br>');
+            // 迷路の内容をモーダルに表示します
+            mazeContent.innerHTML = `<p>${data.message}</p>`;
+            data.choices.forEach(choice => {
+                mazeContent.innerHTML += `
+                    <button class="maze-choice" data-index="${choice.index}">
+                        ${choice.description} (成功確率: ${(choice.probability * 100).toFixed(1)}%)
+                    </button>
+                `;
+            });
             mazeModal.style.display = 'block';
-            getGameState();  // ゲーム状態を更新
+
+            // 選択肢のボタンにイベントリスナーを追加
+            document.querySelectorAll('.maze-choice').forEach(button => {
+                button.addEventListener('click', () => {
+                    const choiceIndex = parseInt(button.getAttribute('data-index'));
+                    makeMazeChoice(choiceIndex);
+                });
+            });
         })
         .catch(error => {
             console.error('Error:', error);
@@ -100,47 +112,80 @@ function handleMazeEvent(player) {
     }
 }
 
-// サイコロカスタマイズを処理する関数
-function checkDiceCustomization(player) {
-    if (player.needs_dice_customization) {
-        diceCustomizationModal.style.display = 'block';
-    }
-}
-
-// サイコロカスタマイズフォームが送信されたときの処理を設定
-diceCustomizationForm.addEventListener('submit', (e) => {
-    e.preventDefault();  // フォームのデフォルトの送信を防止
-
-    // 入力された確率を取得
-    const probabilities = {};
-    let total = 0;
-
-    for (let i = 1; i <= 6; i++) {
-        const value = parseFloat(document.getElementById(`face${i}`).value);
-        probabilities[i] = value;
-        total += value;
-    }
-
-    // 確率の合計が1か確認
-    if (Math.abs(total - 1.0) > 0.01) {
-        alert('確率の合計が1になるようにしてください。');
-        return;
-    }
-
-    // サーバーにカスタマイズした確率を送信
-    fetch('/set_custom_dice', {
+// プレイヤーが迷路で選択肢を選んだときの処理
+function makeMazeChoice(choiceIndex) {
+    fetch('/maze_progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ probabilities: probabilities })
+        body: JSON.stringify({ choice_index: choiceIndex })
     })
     .then(response => response.json())
     .then(data => {
-        diceCustomizationModal.style.display = 'none';
         appendMessage(data.message);
-        updateDiceProbabilities();  // サイコロの確率分布を更新
+        mazeModal.style.display = 'none';
+        getGameState();  // ゲーム状態を更新します
     })
     .catch(error => {
         console.error('Error:', error);
-        appendMessage('サイコロのカスタマイズ中にエラーが発生しました。');
+        appendMessage('迷路の選択中にエラーが発生しました。');
     });
-});
+}
+
+// サイコロ選択イベントを処理する関数
+function handleDiceSelectionEvent(player) {
+    if (player.needs_dice_selection) {
+        // サーバーからサイコロの選択肢を取得します
+        fetch('/get_dice_options', {
+            method: 'GET'
+        })
+        .then(response => response.json())
+        .then(data => {
+            diceSelectionContent.innerHTML = `<p>${player.name}はサイコロを選択できます。以下のサイコロから1つを選んでください。</p>`;
+            data.dice_options.forEach((diceOption, index) => {
+                diceSelectionContent.innerHTML += `
+                    <div class="dice-option">
+                        <h3>${diceOption.name}</h3>
+                        <p>${diceOption.description}</p>
+                        <p>出目の確率:</p>
+                        <ul>
+                            ${Object.entries(diceOption.probabilities).map(([face, prob]) => `<li>${face}: ${(prob * 100).toFixed(1)}%</li>`).join('')}
+                        </ul>
+                        <button class="select-dice-button" data-index="${index}">このサイコロを選ぶ</button>
+                    </div>
+                `;
+            });
+            diceSelectionModal.style.display = 'block';
+
+            // 選択ボタンにイベントリスナーを追加
+            document.querySelectorAll('.select-dice-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const diceIndex = parseInt(button.getAttribute('data-index'));
+                    selectDice(diceIndex);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            appendMessage('サイコロの選択中にエラーが発生しました。');
+        });
+    }
+}
+
+// プレイヤーがサイコロを選択したときの処理
+function selectDice(diceIndex) {
+    fetch('/select_dice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dice_index: diceIndex })
+    })
+    .then(response => response.json())
+    .then(data => {
+        appendMessage(data.message);
+        diceSelectionModal.style.display = 'none';
+        updateDiceProbabilities();  // サイコロの確率分布を更新します
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        appendMessage('サイコロの選択中にエラーが発生しました。');
+    });
+}

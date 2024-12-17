@@ -1,5 +1,3 @@
-/* styles.css */
-
 body {
     font-family: Arial, sans-serif;
     text-align: center;
@@ -67,7 +65,7 @@ button:disabled {
 .modal {
     display: none;
     position: fixed;
-    z-index: 1001;
+    z-index: 1001; /* ローディングインジケーターより上 */
     left: 0;
     top: 0;
     width: 100%;

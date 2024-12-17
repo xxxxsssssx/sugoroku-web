@@ -1,46 +1,35 @@
 // ui.js
 
-// ユーザーインターフェースの更新を行う関数をまとめたモジュール
-
-// メッセージを表示する関数
-function appendMessage(message) {
-    const p = document.createElement('p');
-    p.innerHTML = message;  // メッセージ内の改行などを反映
-    messageArea.appendChild(p);
-    // メッセージエリアを最新のメッセージまでスクロール
-    messageArea.scrollTop = messageArea.scrollHeight;
-}
-
 // プレイヤー情報を更新して表示する関数
 function updatePlayerInfo(players) {
-    playerInfoDiv.innerHTML = '';  // プレイヤー情報エリアをクリア
+    playerInfoDiv.innerHTML = '';  // プレイヤー情報エリアをクリアします
 
     players.forEach((player, index) => {
         const div = document.createElement('div');
         div.classList.add('player-info');
 
-        // プレイヤーのキャラクター画像を表示
+        // プレイヤーのキャラクター画像を表示します
         const img = document.createElement('img');
         img.src = `/static/images/avatars/${player.character}`;
         img.alt = player.name;
-        img.width = 50;  // 画像の幅
-        img.height = 50;  // 画像の高さ
+        img.width = 50;  // 画像の幅を設定します
+        img.height = 50;  // 画像の高さを設定します
 
-        // プレイヤー名を表示
+        // プレイヤー名を表示します
         const nameP = document.createElement('p');
         nameP.textContent = player.name;
         if (index === currentPlayerIndex) {
-            // 現在のプレイヤーを強調表示
+            // 現在のプレイヤーを強調表示します
             nameP.style.fontWeight = 'bold';
             nameP.style.color = 'red';
         }
 
-        // プレイヤーの残りマス数を表示
-        const remainingSteps = 39 - player.position;  // ゴールまでの残りマス数を計算
+        // プレイヤーの残りマス数を表示します
+        const remainingSteps = 39 - player.position;  // ゴールまでの残りマス数を計算します
         const stepsP = document.createElement('p');
         stepsP.textContent = `残りマス数: ${remainingSteps}`;
 
-        // 要素を組み立てて表示
+        // 要素を組み立てて表示します
         div.appendChild(img);
         div.appendChild(nameP);
         div.appendChild(stepsP);
@@ -51,44 +40,32 @@ function updatePlayerInfo(players) {
 // サイコロの確率分布を更新して表示する関数
 function updateDiceProbabilities() {
     fetch('/get_dice_probabilities')
-    .then(response => {
-        hideLoading();  // ローディング表示を非表示
-
-        if (!response.ok) {
-            // レスポンスがエラーの場合、エラーメッセージを取得して例外を投げる
-            return response.json().then(errorData => {
-                throw new Error(errorData.message || 'サーバーエラー');
-            }).catch(() => {
-                throw new Error('サーバーエラー');
-            });
-        }
-        return response.json();  // レスポンスをJSONとしてパース
-    })
+    .then(response => response.json())
     .then(data => {
-        const probs = data.probabilities;  // サイコロの確率を取得
+        const probs = data.probabilities;  // サイコロの確率を取得します
         const labels = [];  // チャートのラベルを格納する配列
         const values = [];  // チャートのデータを格納する配列
 
-        // サイコロの目ごとにラベルと値を設定
+        // サイコロの目ごとにラベルと値を設定します
         for (const face of Object.keys(probs)) {
             labels.push(`目${face}`);
-            values.push(probs[face] * 100);  // パーセンテージに変換
+            values.push(probs[face] * 100);  // パーセンテージに変換します
         }
 
-        // データの最大値を取得
+        // データの最大値を取得します
         const maxValue = Math.max(...values);
 
-        // 既にチャートが存在する場合はデータを更新
+        // 既にチャートが存在する場合はデータを更新します
         if (diceChart) {
             diceChart.data.labels = labels;
             diceChart.data.datasets[0].data = values;
-            diceChart.options.scales.r.suggestedMax = Math.ceil(maxValue / 10) * 10;  // 最大値を調整
+            diceChart.options.scales.r.suggestedMax = Math.ceil(maxValue / 10) * 10;  // 最大値を調整します
             diceChart.update();
         } else {
-            // 新しくチャートを作成
+            // 新しくチャートを作成します
             const ctx = diceChartCanvas.getContext('2d');
             diceChart = new Chart(ctx, {
-                type: 'radar',  // レーダーチャートを使用
+                type: 'radar',  // レーダーチャートを使用します
                 data: {
                     labels: labels,
                     datasets: [{
@@ -104,7 +81,7 @@ function updateDiceProbabilities() {
                         r: {
                             angleLines: { display: true },
                             suggestedMin: 0,
-                            suggestedMax: Math.ceil(maxValue / 10) * 10  // 最大値を調整
+                            suggestedMax: Math.ceil(maxValue / 10) * 10  // 最大値を調整します
                         }
                     },
                     responsive: true,
@@ -114,7 +91,6 @@ function updateDiceProbabilities() {
         }
     })
     .catch(error => {
-        hideLoading();  // ローディング表示を非表示
         console.error('Error:', error);
         appendMessage(`サイコロの確率情報の取得中にエラーが発生しました：${error.message}`);
     });
@@ -126,27 +102,15 @@ function updateGameBoard(players) {
     const cellSize = 70;  // 1マスのサイズ（ピクセル）
     const cols = 10;  // 列数
     const rows = 4;  // 行数
-    ctx.clearRect(0, 0, gameBoard.width, gameBoard.height);  // キャンバスをクリア
+    ctx.clearRect(0, 0, gameBoard.width, gameBoard.height);  // キャンバスをクリアします
 
-    // イベントのあるマスの情報をサーバーから取得
+    // イベントのあるマスの情報をサーバーから取得します
     fetch('/get_event_positions')
-    .then(response => {
-        hideLoading();  // ローディング表示を非表示
-
-        if (!response.ok) {
-            // レスポンスがエラーの場合、エラーメッセージを取得して例外を投げる
-            return response.json().then(errorData => {
-                throw new Error(errorData.message || 'サーバーエラー');
-            }).catch(() => {
-                throw new Error('サーバーエラー');
-            });
-        }
-        return response.json();  // レスポンスをJSONとしてパース
-    })
+    .then(response => response.json())
     .then(data => {
-        const eventPositions = data.event_positions;  // イベントのあるマスの情報
+        const eventPositions = data.event_positions;
 
-        // ボードの各マスを描画
+        // ボードの各マスを描画します
         for (let i = 0; i < 40; i++) {
             const row = Math.floor(i / cols);
             let col = i % cols;
@@ -159,14 +123,14 @@ function updateGameBoard(players) {
             const x = col * cellSize;
             const y = row * cellSize;
 
-            // マスの枠を描画
+            // マスの枠を描画します
             ctx.strokeStyle = 'black';
             ctx.strokeRect(x, y, cellSize, cellSize);
 
-            // イベントのあるマスの背景色を設定
+            // イベントのあるマスの背景色を設定します
             const eventCell = eventPositions.find(event => event.position === i);
             if (eventCell) {
-                // イベントごとに背景色を設定
+                // イベントごとに背景色を設定します
                 switch (eventCell.event_name) {
                     case '2マス進む':
                     case '5マス進む':
@@ -176,14 +140,11 @@ function updateGameBoard(players) {
                     case '4マス戻る':
                         ctx.fillStyle = '#f8d7da';  // 赤系
                         break;
-                    case 'サイコロ確率変更':
+                    case 'サイコロ選択':
                         ctx.fillStyle = '#fff3cd';  // 黄系
                         break;
                     case '確率の迷路':
                         ctx.fillStyle = '#cfe2ff';  // 青系
-                        break;
-                    case 'サイコロカスタマイズ':
-                        ctx.fillStyle = '#f8d7da';  // ピンク系
                         break;
                     case 'モンティ・ホールの挑戦':
                         ctx.fillStyle = '#e2e3e5';  // グレー系
@@ -198,13 +159,13 @@ function updateGameBoard(players) {
                 ctx.fillRect(x, y, cellSize, cellSize);
             }
 
-            // マス番号を描画
+            // マス番号を描画します
             ctx.fillStyle = 'black';
             ctx.font = '12px Arial';
             ctx.fillText(i, x + 5, y + 15);
         }
 
-        // プレイヤーの位置を描画
+        // プレイヤーの位置を描画します
         players.forEach((player, index) => {
             const position = player.position;
             const row = Math.floor(position / cols);
@@ -218,37 +179,37 @@ function updateGameBoard(players) {
             const x = col * cellSize + cellSize / 2;
             const y = row * cellSize + cellSize / 2;
 
-            // プレイヤーのキャラクター画像を描画
+            // プレイヤーのキャラクター画像を描画します
             let img = new Image();
             img.src = `/static/images/avatars/${player.character}`;
             img.onload = function() {
-                ctx.drawImage(img, x - 15, y - 15, 30, 30);  // 画像を中央に描画
+                ctx.drawImage(img, x - 15, y - 15, 30, 30);  // 画像を中央に描画します
             };
         });
     })
     .catch(error => {
-        hideLoading();  // ローディング表示を非表示
         console.error('Error:', error);
         appendMessage(`ゲームボードの更新中にエラーが発生しました：${error.message}`);
     });
 }
 
+
 // キャラクター選択フォームを更新して表示する関数
 function updateCharacterSelection() {
-    const numPlayers = parseInt(numPlayersSelect.value);  // 選択されたプレイヤー人数を取得
+    const numPlayers = parseInt(numPlayersSelect.value);  // 選択されたプレイヤー人数を取得します
     const characterSelectionDiv = document.getElementById('character_selection');
-    characterSelectionDiv.innerHTML = '';  // キャラクター選択エリアをクリア
+    characterSelectionDiv.innerHTML = '';  // キャラクター選択エリアをクリアします
 
     for (let i = 0; i < numPlayers; i++) {
-        // ラベルを作成
+        // ラベルを作成します
         const label = document.createElement('label');
         label.textContent = `プレイヤー${i + 1}のキャラクター: `;
 
-        // セレクトボックスを作成
+        // セレクトボックスを作成します
         const select = document.createElement('select');
         select.classList.add('character-select');
 
-        // アバターのオプションを追加
+        // アバターのオプションを追加します
         const avatars = ['avatar1.png', 'avatar2.png', 'avatar3.png', 'avatar4.png'];
         avatars.forEach(avatar => {
             const option = document.createElement('option');
@@ -257,76 +218,9 @@ function updateCharacterSelection() {
             select.appendChild(option);
         });
 
-        // 要素を組み立てて表示
+        // 要素を組み立てて表示します
         characterSelectionDiv.appendChild(label);
         characterSelectionDiv.appendChild(select);
         characterSelectionDiv.appendChild(document.createElement('br'));
     }
-}
-
-// イベント説明の表示/非表示を切り替える関数
-function toggleEventDescriptions() {
-    if (eventDescriptionsDiv.style.display === 'none' || eventDescriptionsDiv.style.display === '') {
-        // イベント説明を表示
-        eventDescriptionsDiv.style.display = 'block';
-        toggleEventDescriptionsButton.textContent = 'イベント説明を非表示';
-    } else {
-        // イベント説明を非表示
-        eventDescriptionsDiv.style.display = 'none';
-        toggleEventDescriptionsButton.textContent = 'イベント説明を表示';
-    }
-}
-
-// サイコロの確率分布の表示/非表示を切り替える関数
-function toggleDiceProbabilities() {
-    if (diceProbabilitiesDiv.style.display === 'none' || diceProbabilitiesDiv.style.display === '') {
-        // サイコロの確率分布を表示
-        diceProbabilitiesDiv.style.display = 'block';
-        toggleDiceProbabilitiesButton.textContent = 'サイコロの確率分布を非表示';
-    } else {
-        // サイコロの確率分布を非表示
-        diceProbabilitiesDiv.style.display = 'none';
-        toggleDiceProbabilitiesButton.textContent = 'サイコロの確率分布を表示';
-    }
-}
-
-// イベントの説明をサーバーから取得して表示する関数
-function fetchEventDescriptions() {
-    fetch('/get_event_descriptions')
-    .then(response => {
-        hideLoading();  // ローディング表示を非表示
-
-        if (!response.ok) {
-            // レスポンスがエラーの場合、エラーメッセージを取得して例外を投げる
-            return response.json().then(errorData => {
-                throw new Error(errorData.message || 'サーバーエラー');
-            }).catch(() => {
-                throw new Error('サーバーエラー');
-            });
-        }
-        return response.json();  // レスポンスをJSONとしてパース
-    })
-    .then(data => {
-        eventDescriptionsDiv.innerHTML = '';  // イベント説明エリアをクリア
-
-        // 各イベントの説明を表示
-        data.events.forEach(event => {
-            const div = document.createElement('div');
-            const nameP = document.createElement('p');
-            const descP = document.createElement('p');
-
-            nameP.textContent = event.name;
-            nameP.style.fontWeight = 'bold';  // イベント名を強調表示
-
-            descP.textContent = event.description;
-
-            div.appendChild(nameP);
-            div.appendChild(descP);
-            eventDescriptionsDiv.appendChild(div);
-        });
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        appendMessage(`イベントの説明を取得中にエラーが発生しました：${error.message}`);
-    });
 }
