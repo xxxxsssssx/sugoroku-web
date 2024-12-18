@@ -1,5 +1,35 @@
 import random
 
+SLOT_OPTIONS = [
+    {
+        'name': 'スロットA',
+        'description': '大当たり率は低いが、当たれば+5マス！ ハズレもそこそこ。',
+        'results': [
+            {'name': '大当たり', 'steps': 5, 'prob': 0.1},
+            {'name': '中当たり', 'steps': 2, 'prob': 0.3},
+            {'name': 'ハズレ', 'steps': -2, 'prob': 0.6}
+        ]
+    },
+    {
+        'name': 'スロットB',
+        'description': '無難なスロット。大当たりは出にくいが、ハズレも少ない。',
+        'results': [
+            {'name': '大当たり', 'steps': 3, 'prob': 0.15},
+            {'name': '中当たり', 'steps': 2, 'prob': 0.5},
+            {'name': 'ハズレ', 'steps': -1, 'prob': 0.35}
+        ]
+    },
+    {
+        'name': 'スロットC',
+        'description': '低リスク低リターン。ほぼ中当たりで安定している。',
+        'results': [
+            {'name': '大当たり', 'steps': 4, 'prob': 0.05},
+            {'name': '中当たり', 'steps': 2, 'prob': 0.9},
+            {'name': 'ハズレ', 'steps': -1, 'prob': 0.05}
+        ]
+    }
+]
+
 # プリセットされたサイコロオプションを定義
 PREDEFINED_DICE_OPTIONS = [
     {
@@ -19,7 +49,7 @@ MYSTERY_DICE_OPTIONS = [
     {
         'name': '謎のサイコロB',
         'probabilities': {1: 0.4, 2: 0.2, 3: 0.15, 4: 0.1, 5: 0.1, 6: 0.05},
-        'description': '低い目が出やすいが、確率は教えてもらえない。'
+        'description': '内部的に偏ったサイコロ。詳細は非公開。'
     }
 ]
 
@@ -185,6 +215,34 @@ class MontyHallEvent(Event):
         message = f"{player.name}はモンティ・ホールの挑戦に挑みます。1〜3の扉から1つを選んでください。"
         return message
 
+class SlotMachineEvent(Event):
+    def __init__(self):
+        super().__init__(
+            name="全員参加スロットイベント",
+            description="全員がスロットを1回回し、結果に応じて前進または後退する。",
+            effect=self.start_slot_event
+        )
+
+    def start_slot_event(self, player, game):
+        # イベント発生プレイヤーをトリガーに、全員参加のスロット大会開始
+        # この時点でGameクラスに状態を設定し、フロント側で各プレイヤーがスロットを選択・実行する流れ
+        game.is_slot_event_active = True
+        game.slot_trigger_player_index = game.current_player_index
+        # 順番は「止まったプレイヤーの次の人から最後に止まったプレイヤーまで」
+        # ただし実装簡略化のため、全員1回ずつやる順番をサーバーが管理
+        game.slot_order = []
+        num_players = len(game.players)
+        start_idx = (game.current_player_index + 1) % num_players
+        idx = start_idx
+        while True:
+            game.slot_order.append(idx)
+            if idx == game.current_player_index:
+                break
+            idx = (idx + 1) % num_players
+
+        # slot_resultsで各プレイヤーの結果を記録するための辞書を用意
+        game.slot_results = {}
+        return f"{player.name}がイベントを発生させた！全員が順番にスロットを回します。"
 
 class Board:
     def __init__(self, size):
@@ -202,15 +260,25 @@ class Game:
         self.dice = dice
         self.current_player_index = 0
         self.is_over = False
-
-        # ターン制終了条件用の属性を追加
         self.max_turns = max_turns
-        self.current_turn = 1  # 1ターン目から開始
+        self.current_turn = 1
+
+        ### 変更開始：スロットイベント管理用フラグ ###
+        self.is_slot_event_active = False
+        self.slot_order = []
+        self.slot_trigger_player_index = None
+        self.slot_results = {}
+        ### 変更終了 ###
 
     def start(self):
         self.is_over = False
         self.current_player_index = 0
         self.current_turn = 1
+        self.is_slot_event_active = False
+        self.slot_order = []
+        self.slot_trigger_player_index = None
+        self.slot_results = {}
+
         for player in self.players:
             player.position = 0
             player.dice = None
@@ -222,15 +290,18 @@ class Game:
             player.total_distance = 0
 
     def next_turn(self):
+        # スロットイベント中はサイコロを振れないようにするなどの対策が必要
+        # しかしここではユーザーがイベントを起こした後にroll_diceするケースを避けるため、
+        # is_slot_event_activeがTrueなら普通の進行は行わないようにする。
+        if self.is_slot_event_active:
+            return "スロットイベント進行中です。全員がスロットを回すまで待ってください。"
+
         player = self.players[self.current_player_index]
         dice = player.dice if player.dice else self.dice
         roll = dice.roll()
 
-        # 前進分を加算
         player.total_distance += roll
-
         player.position += roll
-        # ループ化対応
         player.position = player.position % self.board.size
 
         message = f"{player.name}はサイコロで{roll}が出た！"
@@ -240,19 +311,28 @@ class Game:
             event_message = current_cell.event.effect(player, self)
             message += f"\nイベント発生！{event_message}"
 
-        # ターン終了後に次のプレイヤーへ
+        # プレイヤー交代処理
         self.current_player_index = (self.current_player_index + 1) % len(self.players)
 
-        # 全員が一巡したらターンを進める（プレイヤー人数分サイコロ振ったら1ターン経過とする場合）
         if self.current_player_index == 0:
             self.current_turn += 1
-            # max_turnsに到達したらゲーム終了
             if self.current_turn > self.max_turns:
                 self.is_over = True
-                # 勝利判定：total_distanceが最大のプレイヤーを勝者に
                 winner = max(self.players, key=lambda p: p.total_distance)
-                message += f"\n{self.max_turns}ターンが経過しました！ゲーム終了！勝者は{winner.name}さん（総移動マス数：{winner.total_distance}）"
+                message += f"\n{self.max_turns}ターンが経過！ゲーム終了！勝者は{winner.name}（総移動：{winner.total_distance}）"
 
         return message
 
 
+def spin_slot(slot_index):
+    # SLOT_OPTIONS[slot_index]から確率に応じて結果を決める
+    option = SLOT_OPTIONS[slot_index]
+    results = option['results']
+    # 累積確率で抽選
+    r = random.random()
+    cum = 0
+    for res in results:
+        cum += res['prob']
+        if r <= cum:
+            return res
+    return results[-1] 

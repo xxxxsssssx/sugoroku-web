@@ -12,7 +12,10 @@ from game_logic import (
     DiceSelectionEvent,
     MontyHallEvent,
     PREDEFINED_DICE_OPTIONS,
-    MYSTERY_DICE_OPTIONS
+    MYSTERY_DICE_OPTIONS,
+    SLOT_OPTIONS, 
+    spin_slot,
+    SlotMachineEvent
 )
 import random
 
@@ -47,6 +50,7 @@ def start_game():
     board = Board(board_size)
 
     # イベントの追加
+    board.add_event(3, SlotMachineEvent())
     board.add_event(7, MontyHallEvent())
     board.add_event(4, MontyHallEvent())
     board.add_event(5, forward_event_factory(2))
@@ -57,6 +61,7 @@ def start_game():
     board.add_event(30, DiceSelectionEvent())  # サイコロ選択イベント
     board.add_event(12, ProbabilityMazeEvent())
     board.add_event(22, MontyHallEvent())
+    board.add_event(35, SlotMachineEvent())
 
     # ゲームの作成
     game = Game(players, board, dice, max_turns=max_turns)
@@ -83,7 +88,8 @@ def get_game_state():
     return jsonify({
         'players': players_state,
         'current_player_index': game.current_player_index,
-        'is_over': game.is_over
+        'is_over': game.is_over,
+        'is_slot_event_active': game.is_slot_event_active
     })
 
 @app.route('/roll_dice', methods=['POST'])
@@ -265,6 +271,71 @@ def monty_hall_choice():
         player.monty_hall_state = {}
         return jsonify({'message': message})
 
+@app.route('/get_slot_options', methods=['GET'])
+def get_slot_options():
+    # スロット一覧を返す。確率は非公開でよいので、名前と説明のみ返す
+    slot_data = []
+    for i, slot in enumerate(SLOT_OPTIONS):
+        slot_data.append({
+            'index': i,
+            'name': slot['name'],
+            'description': slot['description']
+        })
+    return jsonify({'slot_options': slot_data})
+
+@app.route('/spin_slot', methods=['POST'])
+def spin_slot_endpoint():
+    global game
+    if game is None:
+        return jsonify({'message': 'ゲームが開始されていません。'}), 400
+
+    if not game.is_slot_event_active:
+        return jsonify({'message': '現在スロットイベント中ではありません。'}), 400
+
+    data = request.get_json()
+    slot_index = data.get('slot_index', -1)
+    player_index = game.current_player_index
+
+    # スロットイベントではplayerはslot_orderに従い順番に回す
+    # クライアント側は適宜、現在誰の番か問い合わせて表示する必要あり
+    # ここでは、spin_slotを呼ぶ前にフロントが誰の番かを知っている想定
+
+    # 誰の番かをサーバーで管理するため、未実行のプレイヤーを追跡
+    # slot_orderの先頭が次に回すべきプレイヤー
+    if len(game.slot_order) == 0:
+        return jsonify({'message': '全員スロットを回し終えました。'}), 400
+
+    next_player_idx = game.slot_order[0]
+    if next_player_idx < 0 or next_player_idx >= len(game.players):
+        return jsonify({'message': '無効なプレイヤーインデックス。'}), 400
+
+    if slot_index < 0 or slot_index >= len(SLOT_OPTIONS):
+        return jsonify({'message': '無効なスロット選択です。'}), 400
+
+    player = game.players[next_player_idx]
+
+    # スロット結果を取得
+    res = spin_slot(slot_index)
+    steps = res['steps']
+    # 前進/後退処理
+    player.total_distance += steps
+    player.position += steps
+    player.position = player.position % game.board.size
+
+    result_msg = f"{player.name}は{SLOT_OPTIONS[slot_index]['name']}を回した！結果：{res['name']}（{steps}マス）"
+
+    # このプレイヤーは実行終了
+    game.slot_results[player.name] = result_msg
+    game.slot_order.pop(0)
+
+    # 全員終了したらイベント終了
+    if len(game.slot_order) == 0:
+        game.is_slot_event_active = False
+        # 全員の結果をまとめる
+        all_res = "\n".join(game.slot_results.values())
+        result_msg += f"\n全員スロット終了！結果まとめ：\n{all_res}"
+
+    return jsonify({'message': result_msg})
 
 @app.route('/maze_progress', methods=['GET', 'POST'])
 def maze_progress():
