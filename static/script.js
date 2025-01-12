@@ -1,7 +1,7 @@
 // script.js
-// script.js
 
 document.addEventListener('DOMContentLoaded', () => {
+    // --- 既存の要素取得 ---
     const setupDiv = document.getElementById('setup');
     const gameArea = document.getElementById('game_area');
     const startGameButton = document.getElementById('start_game_button');
@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const diceChartCanvas = document.getElementById('dice_chart');
     const toggleDiceProbabilitiesButton = document.getElementById('toggle_dice_probabilities_button');
     const diceProbabilitiesDiv = document.getElementById('dice_probabilities');
+
+    // --- 既存のモンティホール・迷路・サイコロ選択用モーダル要素 ---
     const montyHallModal = document.getElementById('monty_hall_modal');
     const montyHallContent = document.getElementById('monty_hall_content');
     const montyHallCloseButton = document.getElementById('monty_hall_close_button');
@@ -28,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const diceSelectionContent = document.getElementById('dice_selection_content');
     const diceSelectionClose = document.getElementById('dice_selection_close');
 
+    // --- スロットイベント用モーダル ---
     const slotSelectionModal = document.getElementById('slot_selection_modal');
     const slotSelectionContent = document.getElementById('slot_selection_content');
     const slotSelectionClose = document.getElementById('slot_selection_close');
@@ -35,12 +38,61 @@ document.addEventListener('DOMContentLoaded', () => {
         slotSelectionModal.style.display = 'none';
     });
 
+    // === 変更開始: 解説表示用モーダルの要素を取得 ===
+    const explanationModal = document.getElementById('explanation_modal');
+    const explanationContent = document.getElementById('explanation_content');
+    const explanationCloseButton = document.getElementById('explanation_close_button');
+
+    // モーダル外クリック・閉じるボタンで閉じる
+    explanationCloseButton.addEventListener('click', () => {
+        explanationModal.style.display = 'none';
+    });
+    window.addEventListener('click', (event) => {
+        if (event.target === explanationModal) {
+            explanationModal.style.display = 'none';
+        }
+    });
+    // === 変更終了 ===
+
     nextTurnButton.disabled = true;
     rollDiceButton.disabled = true;
 
     let currentPlayerIndex = 0;
     let isGameOver = false;
     let diceChart = null;
+
+    // === 変更開始: イベント解説文マッピング ===
+    const eventExplanations = {
+        "MontyHall": `
+            <h2>モンティ・ホール問題の解説</h2>
+            <p>3つの扉から1つを選んだあと、ハズレ扉を開ける司会者が登場します。
+            実は扉を変更すると約2/3で当たりになる不思議な問題です！</p>
+        `,
+        "Maze": `
+            <h2>確率の迷路の解説</h2>
+            <p>分岐した道ごとに確率が設定されており、トータルで何%でゴールに行けるか
+            計算する例として学べます。</p>
+        `,
+        "SlotMachine": `
+            <h2>スロットイベントの解説</h2>
+            <p>大当たりやハズレを確率的に引くスロットマシン。
+            期待値を考えて、どのスロットを選ぶか戦略的に考えるきっかけになります。</p>
+        `,
+        "DiceSelection": `
+            <h2>サイコロ選択の解説</h2>
+            <p>偏ったサイコロがあるかもしれません。何度か試行して出目の傾向を観察すると、
+            「確率を推定する」感覚が学べます。</p>
+        `
+    };
+
+    // 解説を表示する関数
+    function showEventExplanation(eventKey) {
+        const explanationHtml = eventExplanations[eventKey];
+        if (!explanationHtml) return;
+        explanationContent.innerHTML = explanationHtml;
+        explanationModal.style.display = 'block';
+    }
+    // === 変更終了 ===
 
     numPlayersSelect.addEventListener('change', updateCharacterSelection);
 
@@ -54,9 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         fetch('/start_game', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ num_players: numPlayers, characters: selectedCharacters })
         })
         .then(response => {
@@ -119,15 +169,11 @@ document.addEventListener('DOMContentLoaded', () => {
             updateDiceProbabilities();
             updateGameBoard(data.players);
 
-            // ここではイベント発動チェックしない。後でgetGameStateで確認する
-
             rollDiceButton.disabled = true;
             nextTurnButton.disabled = false;
 
-            // rollDice後、最新状態取得してイベント表示を行う
-            getGameState().then(() => {
-                // getGameState後にイベントチェックするため、getGameState内でイベントチェック
-            });
+            // サイコロ振った後ゲーム状態再取得
+            getGameState().then(() => {});
         })
         .catch(error => {
             hideLoading();
@@ -145,17 +191,14 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleDiceProbabilitiesButton.textContent = 'サイコロの確率分布を表示';
         }
     });
-
     toggleDiceProbabilitiesButton.textContent = 'サイコロの確率分布を表示';
 
     function showLoading() {
         loadingIndicator.style.display = 'block';
     }
-
     function hideLoading() {
         loadingIndicator.style.display = 'none';
     }
-
     function appendMessage(message) {
         const p = document.createElement('p');
         p.innerHTML = message;
@@ -163,7 +206,14 @@ document.addEventListener('DOMContentLoaded', () => {
         messageArea.scrollTop = messageArea.scrollHeight;
     }
 
-    // getGameStateをPromiseで返す
+    // サイコロの分数表示用関数
+    function toFraction(decimal) {
+        const denominator = 6;
+        const numerator = Math.round(decimal * denominator);
+        return `${numerator}/${denominator}`;
+    }
+
+    // ゲーム状態を取得
     function getGameState() {
         return fetch('/get_game_state')
         .then(response => {
@@ -185,8 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateGameBoard(data.players);
             fetchEventDescriptions();
 
-            // ### 変更箇所：ここでイベントをチェック ###
-            // 優先度：モンティホール > 迷路 > サイコロ選択 > スロットイベント
+            // イベント優先度: MontyHall > Maze > DiceSelection > Slot
             const player = data.players[currentPlayerIndex];
             if (player.is_in_monty_hall) {
                 handleMontyHallEvent(player);
@@ -200,13 +249,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 handleDiceSelectionEvent(player);
                 return;
             }
-
-            // 他のイベントがなければスロットイベントを確認
             if (data.is_slot_event_active) {
                 handleSlotEvent();
             }
-            // ### 変更終了 ###
-
         })
         .catch(error => {
             hideLoading();
@@ -233,7 +278,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 nameP.style.fontWeight = 'bold';
                 nameP.style.color = 'red';
             }
-
             const remainingSteps = 39 - player.position;
             const stepsP = document.createElement('p');
             stepsP.textContent = `ループ地点までのマス数: ${remainingSteps}`;
@@ -264,16 +308,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const values = [];
 
             for (const face of Object.keys(probs)) {
-                labels.push(`目${face}`);
+                const frac = toFraction(probs[face]);
+                labels.push(`目${face} (${frac})`);
                 values.push(probs[face] * 100);
             }
-
             const maxValue = Math.max(...values);
 
             if (diceChart) {
                 diceChart.data.labels = labels;
                 diceChart.data.datasets[0].data = values;
                 diceChart.options.scales.r.suggestedMax = Math.ceil(maxValue / 10) * 10;
+                // ツールチップで分数を表示
+                diceChart.options.plugins.tooltip = {
+                    callbacks: {
+                        label: function(context) {
+                            const faceIndex = context.dataIndex;
+                            const match = labels[faceIndex].match(/\((.*)\)/);
+                            return match ? `確率: ${match[1]}` : '確率: 不明';
+                        }
+                    }
+                };
                 diceChart.update();
             } else {
                 const ctx = diceChartCanvas.getContext('2d');
@@ -282,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     data: {
                         labels: labels,
                         datasets: [{
-                            label: 'サイコロの確率（％）',
+                            label: 'サイコロの確率',
                             data: values,
                             backgroundColor: 'rgba(54, 162, 235, 0.2)',
                             borderColor: 'rgba(54, 162, 235, 1)',
@@ -294,7 +348,20 @@ document.addEventListener('DOMContentLoaded', () => {
                             r: {
                                 angleLines: { display: true },
                                 suggestedMin: 0,
-                                suggestedMax: Math.ceil(maxValue / 10) * 10
+                                suggestedMax: Math.ceil(maxValue / 10) * 10,
+                                // レーダー軸目盛を消したいなら：
+                                // ticks: { display: false }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const faceIndex = context.dataIndex;
+                                        const match = labels[faceIndex].match(/\((.*)\)/);
+                                        return match ? `確率: ${match[1]}` : '確率: 不明';
+                                    }
+                                }
                             }
                         },
                         responsive: true,
@@ -329,11 +396,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const div = document.createElement('div');
                 const nameP = document.createElement('p');
                 const descP = document.createElement('p');
-
                 nameP.textContent = event.name;
                 nameP.style.fontWeight = 'bold';
                 descP.textContent = event.description;
-
                 div.appendChild(nameP);
                 div.appendChild(descP);
                 eventDescriptionsDiv.appendChild(div);
@@ -371,8 +436,6 @@ document.addEventListener('DOMContentLoaded', () => {
             rollDiceButton.disabled = false;
             nextTurnButton.disabled = true;
             updatePlayerInfo(data.players);
-
-            // getGameState後のイベントチェックはgetGameState内で行うのでここでは不要
         })
         .catch(error => {
             hideLoading();
@@ -404,18 +467,16 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let i = 0; i < 40; i++) {
                 const row = Math.floor(i / cols);
                 let col = i % cols;
-
                 if (row % 2 === 1) {
                     col = cols - 1 - col;
                 }
 
                 const x = col * cellSize;
                 const y = row * cellSize;
-
                 ctx.strokeStyle = 'black';
                 ctx.strokeRect(x, y, cellSize, cellSize);
 
-                const eventCell = eventPositions.find(event => event.position === i);
+                const eventCell = eventPositions.find(e => e.position === i);
                 if (eventCell) {
                     switch (eventCell.event_name) {
                         case '2マス進む':
@@ -446,7 +507,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     ctx.fillStyle = 'white';
                     ctx.fillRect(x, y, cellSize, cellSize);
                 }
-
                 ctx.fillStyle = 'black';
                 ctx.font = '12px Arial';
                 ctx.fillText(i, x + 5, y + 15);
@@ -456,14 +516,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const position = player.position;
                 const row = Math.floor(position / cols);
                 let col = position % cols;
-
                 if (row % 2 === 1) {
                     col = cols - 1 - col;
                 }
-
                 const x = col * cellSize + cellSize / 2;
                 const y = row * cellSize + cellSize / 2;
-
                 let img = new Image();
                 img.src = `/static/images/avatars/${player.character}`;
                 img.onload = function() {
@@ -503,7 +560,6 @@ document.addEventListener('DOMContentLoaded', () => {
             characterSelectionDiv.appendChild(document.createElement('br'));
         }
     }
-
     updateCharacterSelection();
 
     toggleEventDescriptionsButton.addEventListener('click', () => {
@@ -519,31 +575,28 @@ document.addEventListener('DOMContentLoaded', () => {
     montyHallCloseButton.addEventListener('click', () => {
         montyHallModal.style.display = 'none';
     });
-
     mazeCloseButton.addEventListener('click', () => {
         mazeModal.style.display = 'none';
     });
-
     diceSelectionClose.addEventListener('click', () => {
         diceSelectionModal.style.display = 'none';
     });
 
+    // --- モンティホール ---
     function handleMontyHallEvent(player) {
-        if (player.is_in_monty_hall) {
-            montyHallContent.innerHTML = `
-                <p>${player.name}はモンティ・ホールの挑戦に挑みます。</p>
-                <p>1〜3の扉から1つを選んでください。</p>
-                <button id="monty_choice_1">扉1</button>
-                <button id="monty_choice_2">扉2</button>
-                <button id="monty_choice_3">扉3</button>
-            `;
-            montyHallModal.style.display = 'block';
-            document.getElementById('monty_choice_1').addEventListener('click', () => montyHallChoice(1));
-            document.getElementById('monty_choice_2').addEventListener('click', () => montyHallChoice(2));
-            document.getElementById('monty_choice_3').addEventListener('click', () => montyHallChoice(3));
-        }
+        if (!player.is_in_monty_hall) return;
+        montyHallContent.innerHTML = `
+            <p>${player.name}はモンティ・ホールの挑戦に挑みます。</p>
+            <p>1〜3の扉から1つを選んでください。</p>
+            <button id="monty_choice_1">扉1</button>
+            <button id="monty_choice_2">扉2</button>
+            <button id="monty_choice_3">扉3</button>
+        `;
+        montyHallModal.style.display = 'block';
+        document.getElementById('monty_choice_1').addEventListener('click', () => montyHallChoice(1));
+        document.getElementById('monty_choice_2').addEventListener('click', () => montyHallChoice(2));
+        document.getElementById('monty_choice_3').addEventListener('click', () => montyHallChoice(3));
     }
-
     function montyHallChoice(choice) {
         fetch('/monty_hall_choice', {
             method: 'POST',
@@ -554,38 +607,11 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(data => {
             appendMessage(data.message);
             montyHallContent.innerHTML = '';
-
-            if (data.message.includes('選択を変更しますか？')) {
-                montyHallContent.innerHTML = `
-                    <p>選択を変更しますか？</p>
-                    <button id="monty_change_yes">はい</button>
-                    <button id="monty_change_no">いいえ</button>
-                `;
-                document.getElementById('monty_change_yes').addEventListener('click', () => montyHallChange('yes'));
-                document.getElementById('monty_change_no').addEventListener('click', () => montyHallChange('no'));
-            } else {
-                montyHallModal.style.display = 'none';
-                getGameState();
+            // イベント終了の文字列を検知して解説表示
+            if (data.message.includes('おめでとうございます') || data.message.includes('残念！ハズレ')) {
+                showEventExplanation("MontyHall"); // ここで解説を表示
             }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            appendMessage('モンティ・ホールの挑戦中にエラーが発生しました。');
-        });
-    }
-
-    function montyHallChange(change) {
-        fetch('/monty_hall_choice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ change: change })
-        })
-        .then(response => response.json())
-        .then(data => {
-            appendMessage(data.message);
-            montyHallContent.innerHTML = '';
             montyHallModal.style.display = 'none';
-            alert(data.message);
             getGameState();
         })
         .catch(error => {
@@ -594,36 +620,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- 迷路 ---
     function handleMazeEvent(player) {
-        if (player.is_in_maze) {
-            fetch('/maze_progress', {
-                method: 'GET'
-            })
-            .then(response => response.json())
-            .then(data => {
-                mazeContent.innerHTML = `<p>${data.message}</p>`;
-                data.choices.forEach(choice => {
-                    mazeContent.innerHTML += `
-                        <button class="maze-choice" data-index="${choice.index}">
-                            ${choice.description} (成功確率: ${(choice.probability * 100).toFixed(1)}%)
-                        </button>
-                    `;
-                });
-                mazeModal.style.display = 'block';
-                document.querySelectorAll('.maze-choice').forEach(button => {
-                    button.addEventListener('click', () => {
-                        const choiceIndex = parseInt(button.getAttribute('data-index'));
-                        makeMazeChoice(choiceIndex);
-                    });
-                });
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                appendMessage('迷路の進行中にエラーが発生しました。');
+        if (!player.is_in_maze) return;
+        fetch('/maze_progress', { method: 'GET' })
+        .then(response => response.json())
+        .then(data => {
+            mazeContent.innerHTML = `<p>${data.message}</p>`;
+            data.choices.forEach(choice => {
+                mazeContent.innerHTML += `
+                    <button class="maze-choice" data-index="${choice.index}">
+                        ${choice.description} (成功確率: ${(choice.probability * 100).toFixed(1)}%)
+                    </button>
+                `;
             });
-        }
+            mazeModal.style.display = 'block';
+            document.querySelectorAll('.maze-choice').forEach(button => {
+                button.addEventListener('click', () => {
+                    const choiceIndex = parseInt(button.getAttribute('data-index'));
+                    makeMazeChoice(choiceIndex);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            appendMessage('迷路の進行中にエラーが発生しました。');
+        });
     }
-
     function makeMazeChoice(choiceIndex) {
         fetch('/maze_progress', {
             method: 'POST',
@@ -633,6 +656,10 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(response => response.json())
         .then(data => {
             appendMessage(data.message);
+            // イベント終了ワード
+            if (data.message.includes('迷路を突破') || data.message.includes('迷路で迷い')) {
+                showEventExplanation("Maze");
+            }
             mazeModal.style.display = 'none';
             getGameState();
         })
@@ -642,50 +669,46 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- サイコロ選択 ---
     function handleDiceSelectionEvent(player) {
-        if (player.needs_dice_selection) {
-            fetch('/get_dice_options', {
-                method: 'GET'
-            })
-            .then(response => response.json())
-            .then(data => {
-                diceSelectionContent.innerHTML = `<p>${player.name}はサイコロを選択できます。以下のサイコロから1つを選んでください。</p>`;
-                data.dice_options.forEach((diceOption, index) => {
-                    let probText = "";
-                    if (diceOption.probabilities && Object.keys(diceOption.probabilities).length > 0) {
-                        probText = "<p>出目の確率:</p><ul>";
-                        for (const [face, prob] of Object.entries(diceOption.probabilities)) {
-                            probText += `<li>${face}: ${(prob * 100).toFixed(1)}%</li>`;
-                        }
-                        probText += "</ul>";
-                    } else {
-                        probText = "<p>出目の確率は不明です。振ってみて推測しよう！</p>";
+        if (!player.needs_dice_selection) return;
+        fetch('/get_dice_options')
+        .then(response => response.json())
+        .then(data => {
+            diceSelectionContent.innerHTML = `<p>${player.name}はサイコロを選択できます。以下から1つを選んでください。</p>`;
+            data.dice_options.forEach((diceOption, index) => {
+                let probText = "";
+                if (diceOption.probabilities && Object.keys(diceOption.probabilities).length > 0) {
+                    probText = "<p>出目の確率:</p><ul>";
+                    for (const [face, prob] of Object.entries(diceOption.probabilities)) {
+                        probText += `<li>目${face}: ${toFraction(prob)}</li>`;
                     }
-                
-                    diceSelectionContent.innerHTML += `
-                        <div class="dice-option">
-                            <h3>${diceOption.name}</h3>
-                            <p>${diceOption.description}</p>
-                            ${probText}
-                            <button class="select-dice-button" data-index="${index}">このサイコロを選ぶ</button>
-                        </div>
-                    `;
-                });
-                diceSelectionModal.style.display = 'block';
-                document.querySelectorAll('.select-dice-button').forEach(button => {
-                    button.addEventListener('click', () => {
-                        const diceIndex = parseInt(button.getAttribute('data-index'));
-                        selectDice(diceIndex);
-                    });
-                });
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                appendMessage('サイコロの選択中にエラーが発生しました。');
+                    probText += "</ul>";
+                } else {
+                    probText = "<p>出目の確率は不明です。振ってみて推測しよう！</p>";
+                }
+                diceSelectionContent.innerHTML += `
+                    <div class="dice-option">
+                        <h3>${diceOption.name}</h3>
+                        <p>${diceOption.description}</p>
+                        ${probText}
+                        <button class="select-dice-button" data-index="${index}">このサイコロを選ぶ</button>
+                    </div>
+                `;
             });
-        }
+            diceSelectionModal.style.display = 'block';
+            document.querySelectorAll('.select-dice-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    const diceIndex = parseInt(button.getAttribute('data-index'));
+                    selectDice(diceIndex);
+                });
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            appendMessage('サイコロの選択中にエラーが発生しました。');
+        });
     }
-
     function selectDice(diceIndex) {
         fetch('/select_dice', {
             method: 'POST',
@@ -695,6 +718,9 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(response => response.json())
         .then(data => {
             appendMessage(data.message);
+            // イベント終了とみなして解説表示
+            showEventExplanation("DiceSelection");
+
             diceSelectionModal.style.display = 'none';
             updateDiceProbabilities();
         })
@@ -704,18 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    window.addEventListener('click', (event) => {
-        if (event.target == montyHallModal) {
-            montyHallModal.style.display = 'none';
-        }
-        if (event.target == mazeModal) {
-            mazeModal.style.display = 'none';
-        }
-        if (event.target == diceSelectionModal) {
-            diceSelectionModal.style.display = 'none';
-        }
-    });
-
+    // --- スロットイベント ---
     function handleSlotEvent() {
         fetch('/get_slot_options')
         .then(response => response.json())
@@ -744,7 +759,6 @@ document.addEventListener('DOMContentLoaded', () => {
             appendMessage('スロットオプション取得中にエラーが発生しました。');
         });
     }
-
     function spinSlot(slotIndex) {
         fetch('/spin_slot', {
             method: 'POST',
@@ -754,6 +768,10 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(response => response.json())
         .then(data => {
             appendMessage(data.message);
+            // 全員スロット終了が含まれるなら解説を表示
+            if (data.message.includes('全員スロット終了')) {
+                showEventExplanation("SlotMachine");
+            }
             slotSelectionModal.style.display = 'none';
             getGameState();
         })
@@ -762,6 +780,25 @@ document.addEventListener('DOMContentLoaded', () => {
             appendMessage('スロット回転中にエラーが発生しました。');
         });
     }
+
+    // モーダル外クリック時の閉じる処理
+    window.addEventListener('click', (event) => {
+        if (event.target === montyHallModal) {
+            montyHallModal.style.display = 'none';
+        }
+        if (event.target === mazeModal) {
+            mazeModal.style.display = 'none';
+        }
+        if (event.target === diceSelectionModal) {
+            diceSelectionModal.style.display = 'none';
+        }
+        if (event.target === slotSelectionModal) {
+            slotSelectionModal.style.display = 'none';
+        }
+        if (event.target === explanationModal) {
+            explanationModal.style.display = 'none';
+        }
+    });
 
     updateCharacterSelection();
 });
