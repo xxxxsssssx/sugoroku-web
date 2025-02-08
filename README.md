@@ -1,7 +1,7 @@
 # 確率すごろくゲーム
 
 ## 注意
-This readme is mostly AI generated.(Already Calibrated.)
+This readme is already calibrated,but if you have any problems, please contact to Issues.
 ## 概要
 このゲームは、確率や統計の概念を楽しく学べるオンラインすごろくゲームです。プレイヤーはサイコロを振ってマップ上を進み、さまざまなイベントを通じて確率的な意思決定を行います。ゲームはターン制で進行し、設定したターン数が経過すると終了します。ゴールはなくマップはループしているため、最も多くのマスを進んだプレイヤーが勝者となります。
 
